@@ -1,0 +1,34 @@
+# 统一换行符：仓库内一律 LF
+# 目的：让 checksum / diff / CI 在 Windows 与 Linux 上结果一致
+* text=auto eol=lf
+
+# 明确声明的文本类型
+*.py    text eol=lf
+*.ts    text eol=lf
+*.vue   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.sql   text eol=lf
+*.toml  text eol=lf
+*.ini   text eol=lf
+*.conf  text eol=lf
+Dockerfile text eol=lf
+
+# 二进制：不做换行转换，也不算文本 diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+
+# Windows 批处理脚本必须保留 CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# 富文本文件在 diff 中折叠
+*.docx  diff=astextplain
