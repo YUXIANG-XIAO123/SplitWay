@@ -44,7 +44,7 @@
 ## 2. 目录结构
 
 ```
-travelshare/
+SplitWay/
 ├── .env.example                ← 只提交占位符，.env 被忽略
 ├── .gitignore
 ├── docker-compose.yml
@@ -336,7 +336,7 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 | # | 事项 | 影响 | 需要谁定 |
 |---|---|---|---|
-| O1 | **项目名称** | 目录名、容器名、页面标题、未来仓库名 | Owner（当前占位 `travelshare`） |
+| O1 | ~~**项目名称**~~ | 目录名、容器名、页面标题、仓库名 | **已定：SplitWay · 分途**（见 D18）；本地目录与仓库名均已统一 |
 | O2 | 是否新建独立 GitHub 仓库、公开还是私有 | D14 的 CI 落地位置 | Owner |
 | O3 | 房间页移动端适配是否纳入 V1 | 原为 P2；若纳入会挤占工期 | Owner |
 | O4 | 账单删除权限是否放宽到"付款人本人也可删" | 当前裁定仅房主 | Owner 可推翻 |
