@@ -1,0 +1,62 @@
+# SplitWay 本地编排（#1）
+#
+# 一条命令起全栈：cp .env.example .env && docker compose up -d
+#
+# 规则（团队分工书 硬约束 3）：
+#   - 本文件内不出现任何字面量口令 / 密钥，敏感值一律引用 ${VAR}，取值来自 .env；
+#   - .env 被 .gitignore 忽略，仓库内只提交 .env.example（仅占位符）。
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -q
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      # 连接串在这里拼，避免 .env 里手工维护第二份、也与容器内服务名 db 绑定
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ROOM_MEMBER_LIMIT: ${ROOM_MEMBER_LIMIT}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # 探活打在 FastAPI 自带的 /openapi.json 上，不新增契约之外的探针端点
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3).status == 200 else 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    ports:
+      - "8000:8000"
+
+  frontend:
+    # frontend/Dockerfile 与 frontend/nginx.conf 归前端侧（团队分工书 文件边界）；
+    # 本服务在 compose 侧只固定对外契约：build context ./frontend、
+    # 容器内监听 80、映射 ${FRONTEND_PORT:-8080}:80。
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+
+volumes:
+  db_data:
