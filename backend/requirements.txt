@@ -1,0 +1,12 @@
+# SplitWay 后端依赖（#1）
+# 选型依据：docs/architecture.md §1。全部钉死到具体版本，保证 A1「可复现环境」。
+# 只列 #1 用得到的包；bcrypt / PyJWT 等随 #2 接入时再加。
+
+fastapi==0.141.1            # Web 框架；自带 OpenAPI（服务 C2 验收）
+uvicorn[standard]==0.54.0   # ASGI 服务器。注意 [standard] 会连带装上
+                            # httptools / watchfiles / websockets / pyyaml / python-dotenv；
+                            # 其中 python-dotenv 只是被装进镜像、并未被调用——配置只从 os.environ 读
+                            # （app/config.py）。若认为这违反"单一配置来源"的口径，去掉 [standard] 即可。
+SQLAlchemy==2.0.54          # ORM；架构选型写死 2.0 线（Mapped[] 声明式），不取 2.1.x
+alembic==1.20.0             # 迁移
+psycopg[binary]==3.3.6      # PostgreSQL 同步驱动（DSN 用 postgresql+psycopg://）
