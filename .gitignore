@@ -9,8 +9,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
-.venv/
+.ruff_cache/
+.venv*/
 venv/
+env/
 
 # Node / 前端
 node_modules/
@@ -20,8 +22,13 @@ dist/
 # 上传文件（V1 不做上传，目录亦不入库）
 uploads/
 
+# 运行产物
+*.sqlite3
+*.db
+
 # 编辑器与系统
 .idea/
 .vscode/
 .DS_Store
+Thumbs.db
 *.log
