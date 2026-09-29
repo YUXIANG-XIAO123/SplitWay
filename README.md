@@ -2,7 +2,7 @@
 
 > **面向小群体出行的同行撮合与共同账目结算工具**
 > （Companion Matching & Shared Expense Settlement for Small Group Travel）
-> 个人全栈项目 · V1 开发中 · 公开仓库
+> 个人全栈项目
 
 ---
 
