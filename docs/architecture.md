@@ -2,8 +2,8 @@
 
 | 项 | 内容 |
 |---|---|
-| 文档版本 | V1.0（架构决策层：Gaster + Owner 共同裁定） |
-| 上游依据 | `docs/PRD.md`（天子，V1.0） |
+| 文档版本 | V1.0（架构与接口契约裁定：Owner） |
+| 上游依据 | `docs/PRD.md`（V1.0） |
 | 冻结状态 | 选型已冻结；契约已冻结（Owner 可推翻任意一条，工程师按修改返工） |
 | 语言 | 中文 |
 
@@ -204,7 +204,7 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 | 校验失败 | 由 FastAPI / Pydantic 自动返回 422 |
 | 业务错误 | 统一 `{"detail": {"code": "<字符串码>", "message": "<中文说明>"}}`，不自定义 Result 包装层 |
 
-> **对 C2 验收口径的澄清**：C2 要禁的是"**操作者身份**作为入参"。`{member_id}` / `{post_id}` 这类**资源标识**作为路径参数是正常的 REST 设计，不属于身份入参。神化（QA）做 C2 断言时按此口径判定。
+> **对 C2 验收口径的澄清**：C2 要禁的是"**操作者身份**作为入参"。`{member_id}` / `{post_id}` 这类**资源标识**作为路径参数是正常的 REST 设计，不属于身份入参。独立验收时按此口径判定。
 
 ### 5.2 认证
 
@@ -291,18 +291,18 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 | # | 任务 | 负责 | 依赖 |
 |---|---|---|---|
-| T1 | 仓库骨架：`.gitignore` / `.env.example` / `docker-compose.yml`（db+backend）/ Dockerfile / `config.py`（缺环境变量即启动失败）/ Alembic 初始化 / `users` 表迁移 | 神绮 | — |
-| T2 | 认证：register / login / me，bcrypt 哈希，JWT 签发与校验，`get_current_user` 依赖 | 神绮 | T1 |
-| T3 | 搭子帖：CRUD + 列表分页 + 仅帖主可删 | 神绮 | T2 |
-| T4 | 房间与成员：建房间、申请、审批、退出、四态流转、部分唯一索引迁移、房间级权限依赖 | 神绮 | T3 |
-| T5 | 账单与结算：均分最大余额法（`services/split.py`）、账单增删、结算幂等、结算后只读 | 神绮 | T4 |
-| T6 | 后端测试：pytest 覆盖 T2-T5；`test_split_precision.py`（B3）、`test_idor.py`（C1）必做 | 神绮 | T5 |
-| T7 | 前端骨架：Vite+TS+Tailwind、axios 实例与拦截器、`useAuth`、路由与登录守卫、登录注册页 | 万兰 | — |
-| T8 | 找搭子列表页 + 帖子详情页（发帖、申请加入、创建房间） | 万兰 | T7 |
-| T9 | 房间页：成员区 / 记账区 / 结算区三分区 | 万兰 | T8 |
-| T10 | 前端容器化：多阶段构建 + nginx 静态托管 + `/api` 反代；接入 `docker-compose.yml` | 万兰 | T9 |
-| T11 | QA 验收：独立执行 A1-A5 / B1-B6 / C1-C6，输出验收报告 | 神化 | T6, T10 |
-| T12 | 红队审计：只报不改，逐条标 成立 / 需修正 / 无法验证 | 巅峰 | T11 |
+| T1 | 仓库骨架：`.gitignore` / `.env.example` / `docker-compose.yml`（db+backend）/ Dockerfile / `config.py`（缺环境变量即启动失败）/ Alembic 初始化 / `users` 表迁移 | 陈展鸿 | — |
+| T2 | 认证：register / login / me，bcrypt 哈希，JWT 签发与校验，`get_current_user` 依赖 | 陈展鸿 | T1 |
+| T3 | 搭子帖：CRUD + 列表分页 + 仅帖主可删 | 陈展鸿 | T2 |
+| T4 | 房间与成员：建房间、申请、审批、退出、四态流转、部分唯一索引迁移、房间级权限依赖 | 陈展鸿 | T3 |
+| T5 | 账单与结算：均分最大余额法（`services/split.py`）、账单增删、结算幂等、结算后只读 | 陈展鸿 | T4 |
+| T6 | 后端测试：pytest 覆盖 T2-T5；`test_split_precision.py`（B3）、`test_idor.py`（C1）必做 | 陈展鸿 | T5 |
+| T7 | 前端骨架：Vite+TS+Tailwind、axios 实例与拦截器、`useAuth`、路由与登录守卫、登录注册页 | 包伟榕 | — |
+| T8 | 找搭子列表页 + 帖子详情页（发帖、申请加入、创建房间） | 包伟榕 | T7 |
+| T9 | 房间页：成员区 / 记账区 / 结算区三分区 | 包伟榕 | T8 |
+| T10 | 前端容器化：多阶段构建 + nginx 静态托管 + `/api` 反代；接入 `docker-compose.yml` | 包伟榕 | T9 |
+| T11 | QA 验收：独立执行 A1-A5 / B1-B6 / C1-C6，输出验收报告 | 待定 | T6, T10 |
+| T12 | 红队审计：只报不改，逐条标 成立 / 需修正 / 无法验证 | 待定 | T11 |
 
 **并行安排**：T1-T6（后端）与 T7-T10（前端）可并行，契约已在 §5 冻结；T10 需要 T9 完成后接入 compose。
 
@@ -312,23 +312,23 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 | # | 决策 | 结论 | 裁定人 | 日期 |
 |---|---|---|---|---|
-| D1 | 后端框架 | FastAPI（而非 Flask / DRF） | Gaster + Owner | 09-28 |
-| D2 | 前端框架 | **Vue 3 + Vite + TS + Tailwind**（Owner 拍板；天子原建议 React+TS 未采纳） | Owner | 09-28 |
-| D3 | 样式层 | **只保留一套**（Tailwind）；不接受 MUI + Tailwind 双层 | Gaster | 09-28 |
-| D4 | 数据库 | PostgreSQL 16 | Gaster + Owner | 09-28 |
-| D5 | 执行模型 | 同步（非 async） | Gaster | 09-28 |
-| D6 | 密码哈希库 | 直接用 `bcrypt`，不用 passlib | Gaster | 09-28 |
-| D7 | 金额表示 | 全程整数分（BIGINT） | Gaster | 09-28 |
-| D8 | 分摊范围 | V1 只做均分；不等额留 P1 | Gaster | 09-28 |
+| D1 | 后端框架 | FastAPI（而非 Flask / DRF） | Owner | 2026-09-28 |
+| D2 | 前端框架 | **Vue 3 + Vite + TS + Tailwind**（Owner 拍板） | Owner | 09-28 |
+| D3 | 样式层 | **只保留一套**（Tailwind）；不接受 MUI + Tailwind 双层 | Owner | 2026-09-28 |
+| D4 | 数据库 | PostgreSQL 16 | Owner | 2026-09-28 |
+| D5 | 执行模型 | 同步（非 async） | Owner | 2026-09-28 |
+| D6 | 密码哈希库 | 直接用 `bcrypt`，不用 passlib | Owner | 2026-09-28 |
+| D7 | 金额表示 | 全程整数分（BIGINT） | Owner | 2026-09-28 |
+| D8 | 分摊范围 | V1 只做均分；不等额留 P1 | Owner | 2026-09-28 |
 | D9 | 余数归属 | 最大余额法（均分场景退化为按 userId 升序分配） | Owner | 09-28 |
-| D10 | 结算后 | 只读，不可回滚 | Gaster + Owner | 09-28 |
-| D11 | 房间人数上限 | 默认 20，配置可改 | Gaster | 09-28 |
-| D12 | 账户体系 | 仅用户名 + 密码 | Gaster | 09-28 |
-| D13 | 部署目标 | 仅本地 compose；CORS 白名单走环境变量 | Gaster | 09-28 |
-| D14 | CI | 需要，GitHub Actions 跑 pytest + 越权脚本 | Gaster | 09-28 |
-| D15 | 文件上传 | V1 不做，C6 标 N/A | Gaster | 09-28 |
-| D16 | 越权返回码 | 403（而非 404），便于 C1 断言；信息面收敛留待铂金档 | Gaster | 09-28 |
-| D17 | 前端服务形态 | nginx 托管产物 + `/api` 同源反代 | Gaster | 09-28 |
+| D10 | 结算后 | 只读，不可回滚 | Owner | 2026-09-28 |
+| D11 | 房间人数上限 | 默认 20，配置可改 | Owner | 2026-09-28 |
+| D12 | 账户体系 | 仅用户名 + 密码 | Owner | 2026-09-28 |
+| D13 | 部署目标 | 仅本地 compose；CORS 白名单走环境变量 | Owner | 2026-09-28 |
+| D14 | CI | 需要，GitHub Actions 跑 pytest + 越权脚本 | Owner | 2026-09-28 |
+| D15 | 文件上传 | V1 不做，C6 标 N/A | Owner | 2026-09-28 |
+| D16 | 越权返回码 | 403（而非 404），便于 C1 断言；信息面收敛留待铂金档 | Owner | 2026-09-28 |
+| D17 | 前端服务形态 | nginx 托管产物 + `/api` 同源反代 | Owner | 2026-09-28 |
 
 ---
 
