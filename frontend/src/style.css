@@ -1,0 +1,7 @@
+ /*
+ * Tailwind CSS v4（CSS-first 配置）入口。
+ * v4 不再需要 tailwind.config.js，主题与内容扫描由 @tailwindcss/vite 插件处理；
+ * 因此本仓库不创建 tailwind.config.js（详见最终报告的「契约疑问 / 偏离」）。
+ * 全项目只保留这一套样式层，不引入任何第二套组件库或样式方案。
+ */
+@import 'tailwindcss';
