@@ -122,10 +122,14 @@ SplitWay/
 | `partner_posts` | `id`, `owner_id`→users, `destination`, `depart_date`, `need_count`, `note`, `status`, `created_at` | `status` ∈ {open, closed}；`need_count` ≥ 2 |
 | `rooms` | `id`, `post_id`→partner_posts, `owner_id`→users, `status`, `member_limit`, `created_at` | `status` ∈ {open, settled}；`member_limit` 默认 20（配置可改） |
 | `room_members` | `id`, `room_id`→rooms, `user_id`→users, `status`, `role`, `created_at`, `updated_at` | `status` ∈ {pending, joined, rejected, left}；`role` ∈ {owner, member} |
-| `bills` | `id`, `room_id`→rooms, **`payer_member_id`**→room_members, `amount_cents`, `note`, `created_at` | `amount_cents > 0` |
-| `bill_shares` | `id`, `bill_id`→bills, **`member_id`**→room_members, `amount_cents` | 分摊明细；**同一账单的分摊额之和必须等于账单金额** |
+| `bills` | `id`, `room_id`→rooms, `payer_id`→**users**, `amount_cents`, `note`, `created_at` | `amount_cents > 0` |
+| `bill_shares` | `id`, `bill_id`→bills, `user_id`→**users**, `amount_cents` | 分摊明细；**同一账单的分摊额之和必须等于账单金额** |
 | `settlements` | `id`, `room_id`→rooms **唯一**, `created_at` | 唯一约束即幂等保证（B5） |
-| `settlement_items` | `id`, `settlement_id`→settlements, **`member_id`**→room_members, `user_id`→users, `paid_cents`, `share_cents`, `net_cents` | 每成员一行；`user_id` 冗余存一份供展示 |
+| `settlement_items` | `id`, `settlement_id`→settlements, `user_id`→**users**, `paid_cents`, `share_cents`, `net_cents` | 每人一行 |
+
+> **账务落库一律用 `user_id`**（`bills.payer_id` / `bill_shares.user_id` / `settlement_items.user_id` 全部外键到 `users`）。
+> 原因见 §5.5 与 `docs/decisions.md` 的 D22：账目主体是"人"，要跨成员状态变化存活；结算数学也是按用户汇总的。
+> `room_members.id` 只用于**房间内的成员资格校验**，不落进账务表。
 
 **关键约束（PostgreSQL 部分唯一索引）**：
 
@@ -240,14 +244,21 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 |---|---|---|---|---|
-| POST | `/api/rooms/{room_id}/bills` | `{payer_member_id?, amount_cents, note?, participant_member_ids[]}` | 201 账单 + 分摊明细 | **仅 joined 成员**；房间已结算 → 409（B4/B5） |
+| POST | `/api/rooms/{room_id}/bills` | `{payer_id?, amount_cents, note?, participant_member_ids[]}` | 201 账单 + 分摊明细 | **仅 joined 成员**；房间已结算 → 409（B4/B5） |
 | GET | `/api/rooms/{room_id}/bills` | — | 200 账单列表（含分摊） | **仅 joined/owner 成员** |
 | DELETE | `/api/rooms/{room_id}/bills/{bill_id}` | — | 204 | **仅房主**；房间已结算 → 409 |
 
-- **房间范围内一律用 `member_id`（`room_members.id`）作为"谁"的标识**，不用 `user_id`。理由：房间内的参与者由成员记录唯一确定；`user_id` 不进入 URL，C2 的自动化检查（"参数中不出现身份字段"）无需写例外。
-- `payer_member_id` 省略时默认为操作者本人在该房间的 `member_id`；指定时必须是该房间的 joined 成员。
+**提交体里有两个标识字段，分属两个 ID 空间，各自有明确理由**（见 D22）：
+
+| 字段 | ID 空间 | 为什么是这个空间 |
+|---|---|---|
+| `participant_member_ids` | **房间成员 ID**（`room_members.id`） | 入口要校验"是不是该房间的 joined 成员"，`member_id` 是天然键；校验通过后转 `user_id` 落库 |
+| `payer_id` | **用户 ID**（`users.id`） | 付款人是"人"，要跨成员状态变化（退出 / 重进 / 换房间）存活；结算数学按用户汇总，落库统一为 `user_id` |
+
+- `payer_id` 省略时默认为操作者本人；指定时，该用户必须是该房间的 joined 成员。
 - `participant_member_ids` 必须全部是该房间的 joined 成员，且非空。
-- 若 `payer_member_id` 不在 `participant_member_ids` 中，属合法（代付场景）。
+- 若 `payer_id` 对应的用户不在 `participant_member_ids` 中，属合法（代付场景）。
+- 出参 `payer_id` 与 `shares[].user_id` 同为**用户 ID**。
 
 ### 5.6 结算
 
@@ -291,18 +302,18 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 | # | 任务 | 负责 | 依赖 |
 |---|---|---|---|
-| T1 | 仓库骨架：`.gitignore` / `.env.example` / `docker-compose.yml`（db+backend）/ Dockerfile / `config.py`（缺环境变量即启动失败）/ Alembic 初始化 / `users` 表迁移 | 陈展鸿 | — |
-| T2 | 认证：register / login / me，bcrypt 哈希，JWT 签发与校验，`get_current_user` 依赖 | 陈展鸿 | T1 |
-| T3 | 搭子帖：CRUD + 列表分页 + 仅帖主可删 | 陈展鸿 | T2 |
-| T4 | 房间与成员：建房间、申请、审批、退出、四态流转、部分唯一索引迁移、房间级权限依赖 | 陈展鸿 | T3 |
-| T5 | 账单与结算：均分最大余额法（`services/split.py`）、账单增删、结算幂等、结算后只读 | 陈展鸿 | T4 |
-| T6 | 后端测试：pytest 覆盖 T2-T5；`test_split_precision.py`（B3）、`test_idor.py`（C1）必做 | 陈展鸿 | T5 |
-| T7 | 前端骨架：Vite+TS+Tailwind、axios 实例与拦截器、`useAuth`、路由与登录守卫、登录注册页 | 包伟榕 | — |
-| T8 | 找搭子列表页 + 帖子详情页（发帖、申请加入、创建房间） | 包伟榕 | T7 |
-| T9 | 房间页：成员区 / 记账区 / 结算区三分区 | 包伟榕 | T8 |
-| T10 | 前端容器化：多阶段构建 + nginx 静态托管 + `/api` 反代；接入 `docker-compose.yml` | 包伟榕 | T9 |
-| T11 | QA 验收：独立执行 A1-A5 / B1-B6 / C1-C6，输出验收报告 | 待定 | T6, T10 |
-| T12 | 红队审计：只报不改，逐条标 成立 / 需修正 / 无法验证 | 待定 | T11 |
+| T1 | 仓库骨架：`.gitignore` / `.env.example` / `docker-compose.yml`（db+backend）/ Dockerfile / `config.py`（缺环境变量即启动失败）/ Alembic 初始化 / `users` 表迁移 | Owner | — |
+| T2 | 认证：register / login / me，bcrypt 哈希，JWT 签发与校验，`get_current_user` 依赖 | Owner | T1 |
+| T3 | 搭子帖：CRUD + 列表分页 + 仅帖主可删 | Owner | T2 |
+| T4 | 房间与成员：建房间、申请、审批、退出、四态流转、部分唯一索引迁移、房间级权限依赖 | Owner | T3 |
+| T5 | 账单与结算：均分最大余额法（`services/split.py`）、账单增删、结算幂等、结算后只读 | Owner | T4 |
+| T6 | 后端测试：pytest 覆盖 T2-T5；`test_split_precision.py`（B3）、`test_idor.py`（C1）必做 | Owner | T5 |
+| T7 | 前端骨架：Vite+TS+Tailwind、axios 实例与拦截器、`useAuth`、路由与登录守卫、登录注册页 | Owner | — |
+| T8 | 找搭子列表页 + 帖子详情页（发帖、申请加入、创建房间） | Owner | T7 |
+| T9 | 房间页：成员区 / 记账区 / 结算区三分区 | Owner | T8 |
+| T10 | 前端容器化：多阶段构建 + nginx 静态托管 + `/api` 反代；接入 `docker-compose.yml` | Owner | T9 |
+| T11 | QA 验收：独立执行 A1-A5 / B1-B6 / C1-C6，输出验收报告 | 独立会话 | T6, T10 |
+| T12 | 红队审计：只报不改，逐条标 成立 / 需修正 / 无法验证 | 独立会话 | T11 |
 
 **并行安排**：T1-T6（后端）与 T7-T10（前端）可并行，契约已在 §5 冻结；T10 需要 T9 完成后接入 compose。
 
@@ -310,25 +321,21 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 ## 7. 决策记录（V1）
 
-| # | 决策 | 结论 | 裁定人 | 日期 |
-|---|---|---|---|---|
-| D1 | 后端框架 | FastAPI（而非 Flask / DRF） | Owner | 2026-09-28 |
-| D2 | 前端框架 | **Vue 3 + Vite + TS + Tailwind**（Owner 拍板） | Owner | 09-28 |
-| D3 | 样式层 | **只保留一套**（Tailwind）；不接受 MUI + Tailwind 双层 | Owner | 2026-09-28 |
-| D4 | 数据库 | PostgreSQL 16 | Owner | 2026-09-28 |
-| D5 | 执行模型 | 同步（非 async） | Owner | 2026-09-28 |
-| D6 | 密码哈希库 | 直接用 `bcrypt`，不用 passlib | Owner | 2026-09-28 |
-| D7 | 金额表示 | 全程整数分（BIGINT） | Owner | 2026-09-28 |
-| D8 | 分摊范围 | V1 只做均分；不等额留 P1 | Owner | 2026-09-28 |
-| D9 | 余数归属 | 最大余额法（均分场景退化为按 userId 升序分配） | Owner | 09-28 |
-| D10 | 结算后 | 只读，不可回滚 | Owner | 2026-09-28 |
-| D11 | 房间人数上限 | 默认 20，配置可改 | Owner | 2026-09-28 |
-| D12 | 账户体系 | 仅用户名 + 密码 | Owner | 2026-09-28 |
-| D13 | 部署目标 | 仅本地 compose；CORS 白名单走环境变量 | Owner | 2026-09-28 |
-| D14 | CI | 需要，GitHub Actions 跑 pytest + 越权脚本 | Owner | 2026-09-28 |
-| D15 | 文件上传 | V1 不做，C6 标 N/A | Owner | 2026-09-28 |
-| D16 | 越权返回码 | 403（而非 404），便于 C1 断言；信息面收敛留待铂金档 | Owner | 2026-09-28 |
-| D17 | 前端服务形态 | nginx 托管产物 + `/api` 同源反代 | Owner | 2026-09-28 |
+> **权威表在 `docs/decisions.md`（D1–D22）—— 本文件不再复制决策表，避免两份表漂移。**
+>
+> 历史：此处曾维护一份 D1–D17 的副本，与 `decisions.md`（当时已到 D21）**长期不一致**。
+> 2026-10-12 核实后移除副本，改为此指针，遵循项目自定的"Single Source of Truth"原则。
+
+**与本文档强相关的决策索引**（完整论证见 `decisions.md`）：
+
+| 决策 | 与本文档的关系 |
+|---|---|
+| D1 / D4 / D5 / D6 | §1 技术选型 |
+| D2 / D3 / D17 | §1.1 前端服务形态 |
+| D7 / D8 / D9 | §3.1 金额表示、§4.2 分摊规则 |
+| D10 | §4.3 结算规则（结算后只读） |
+| **D22** | §3.2 表结构、§5.5 账单接口的 **ID 空间约定** |
+| D16 | §5.7 错误码语义（越权用 403） |
 
 ---
 

@@ -129,18 +129,14 @@ sh scripts/scan_secrets.sh
 
 ---
 
-## 团队与分工
+## 开发方式
 
-| 角色 | 成员 | GitHub | 负责范围 |
-|---|---|---|---|
-| **Project Lead & Architect (Owner)** | 肖宇翔 | `@YUXIANG-XIAO123` | 架构与接口契约、Issue 派发与放行、PR 合并、验收签字 |
-| **Backend Engineer** | 陈展鸿 | `@gasterfly` | Issue `#1`–`#6`：骨架与迁移 / 认证 / 搭子帖 / 房间与成员 / 账单与结算 / 后端测试 |
-| **Frontend Engineer** | 包伟榕 | `@LunarQueen` | Issue `#7`–`#10`：骨架与登录 / 列表与详情 / 房间页 / 容器化 |
-| **独立验收 · 红队审计** | 待定 | — | Issue `#11` / `#12` |
+单人项目。**Project Lead & Architect (Owner)**：肖宇翔（[`@YUXIANG-XIAO123`](https://github.com/YUXIANG-XIAO123)）—— 负责范围冻结、架构与接口契约、Issue 派发与放行、验收签字。
 
-架构决策层为 **Owner**：架构与接口契约的草案可由 AI 辅助起草，**最终裁定与签字在 Owner**；任何内容合入 `main` 前须由人过一遍。AI 辅助开发的口径见 `docs/development-handbook.md` 附录 E。
+实现与复审辅助由 AI 承担（代码起草、契约草案、复审意见、仓库巡检）；**AI 不列为项目成员**，口径见 `docs/development-handbook.md` 附录 E —— 任何内容合入 `main` 前须由人过一遍，验收以命令输出为准。
 
-详见 `docs/团队分工书.md`。
+单人做法里最关键的一件事是：**给同一个人戴四顶不许同时戴的帽子**（需求 / 实现 / 红队 / 验收），
+其中 **红队与实现、实现与验收必须是不同会话** —— 否则就是自己给自己批卷子。详见 `docs/开发流程与规范.md`。
 
 ---
 
