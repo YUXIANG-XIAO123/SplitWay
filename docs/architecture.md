@@ -128,7 +128,7 @@ SplitWay/
 | `settlement_items` | `id`, `settlement_id`→settlements, `user_id`→**users**, `paid_cents`, `share_cents`, `net_cents` | 每人一行 |
 
 > **账务落库一律用 `user_id`**（`bills.payer_id` / `bill_shares.user_id` / `settlement_items.user_id` 全部外键到 `users`）。
-> 原因见 §5.5 与 `docs/decisions.md` 的 D22：账目主体是"人"，要跨成员状态变化存活；结算数学也是按用户汇总的。
+> 原因见 §5.5 与 `docs/decisions.md` 的 D20：账目主体是"人"，要跨成员状态变化存活；结算数学也是按用户汇总的。
 > `room_members.id` 只用于**房间内的成员资格校验**，不落进账务表。
 
 **关键约束（PostgreSQL 部分唯一索引）**：
@@ -262,7 +262,7 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 | GET | `/api/rooms/{room_id}/bills` | — | 200 账单列表（含分摊） | **仅 joined/owner 成员** |
 | DELETE | `/api/rooms/{room_id}/bills/{bill_id}` | — | 204 | **仅房主**；房间已结算 → 409 |
 
-**提交体里有两个标识字段，分属两个 ID 空间，各自有明确理由**（见 D22）：
+**提交体里有两个标识字段，分属两个 ID 空间，各自有明确理由**（见 D20）：
 
 | 字段 | ID 空间 | 为什么是这个空间 |
 |---|---|---|
@@ -330,8 +330,8 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 | T8 | 找搭子列表页 + 帖子详情页（发帖、申请加入、创建房间） | Owner | T7 |
 | T9 | 房间页：成员区 / 记账区 / 结算区三分区 | Owner | T8 |
 | T10 | 前端容器化：多阶段构建 + nginx 静态托管 + `/api` 反代；接入 `docker-compose.yml` | Owner | T9 |
-| T11 | QA 验收：独立执行 A1-A5 / B1-B6 / C1-C6，输出验收报告 | 独立会话 | T6, T10 |
-| T12 | 红队审计：只报不改，逐条标 成立 / 需修正 / 无法验证 | 独立会话 | T11 |
+| T11 | QA 验收：独立执行 A1-A5 / B1-B6 / C1-C6，输出验收报告 | Owner（独立复核） | T6, T10 |
+| T12 | 红队审计：只报不改，逐条标 成立 / 需修正 / 无法验证 | Owner（独立复核） | T11 |
 
 **并行安排**：T1-T6（后端）与 T7-T10（前端）可并行，契约已在 §5 冻结；T10 需要 T9 完成后接入 compose。
 
@@ -339,7 +339,7 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 ## 7. 决策记录（V1）
 
-> **权威表在 `docs/decisions.md`（D1–D22）—— 本文件不再复制决策表，避免两份表漂移。**
+> **权威表在 `docs/decisions.md`（D1–D21）—— 本文件不再复制决策表，避免两份表漂移。**
 >
 > 历史：此处曾维护一份 D1–D17 的副本，与 `decisions.md`（当时已到 D21）**长期不一致**。
 > 2026-10-12 核实后移除副本，改为此指针，遵循项目自定的"Single Source of Truth"原则。
@@ -352,7 +352,7 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 | D2 / D3 / D17 | §1.1 前端服务形态 |
 | D7 / D8 / D9 | §3.1 金额表示、§4.2 分摊规则 |
 | D10 | §4.3 结算规则（结算后只读） |
-| **D22** | §3.2 表结构、§5.5 账单接口的 **ID 空间约定** |
+| **D20** | §3.2 表结构、§5.5 账单接口的 **ID 空间约定** |
 | D16 | §5.7 错误码语义（越权用 403） |
 
 ---
