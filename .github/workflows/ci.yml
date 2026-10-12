@@ -1,0 +1,93 @@
+name: CI
+
+# 触发：main 的推送，以及任何指向 main 的 PR。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同一分支的重复运行只保留最新一次。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端 · pytest
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: splitway
+          POSTGRES_PASSWORD: change_me_ci_only
+          POSTGRES_DB: splitway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U splitway -d splitway"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    env:
+      # 仅用于 CI 的一次性值，不是真实凭据。
+      DATABASE_URL: postgresql+psycopg://splitway:change_me_ci_only@localhost:5432/splitway
+      JWT_SECRET: change_me_ci_only_0123456789abcdefghijklmnop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: 安装依赖
+        run: python -m pip install --upgrade pip && python -m pip install -r backend/requirements.txt
+
+      - name: 运行测试
+        working-directory: backend
+        run: python -m pytest -q
+
+  frontend:
+    name: 前端 · 类型检查与构建
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: 构建（含 vue-tsc 类型检查）
+        working-directory: frontend
+        run: npm run build
+
+  secrets:
+    name: 安全 · 凭据扫描
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .env 不得入库
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env 被提交进了仓库"
+            exit 1
+          fi
+          echo "OK：.env 未入库"
+
+      - name: 源码硬编码凭据扫描
+        run: sh scripts/scan_secrets.sh

@@ -112,3 +112,52 @@ def test_settlement_requires_at_least_one_bill(client: TestClient, make_user) ->
     ok = client.post(f"/api/rooms/{room['id']}/settlement", headers=owner["headers"])
     assert ok.status_code == 200, ok.text
     assert ok.json()["total_cents"] == 10000
+
+
+def test_settlement_includes_member_who_left_after_billing(
+    client: TestClient, make_user
+) -> None:
+    """记完账之后退出房间的成员，仍必须出现在结算结果里。
+
+    回归用例。修复前的行为：结算参与者只取 ``status = joined``，于是
+    - 已退出成员的已付 / 分摊被累加进字典却不输出 → **净额之和不为 0**；
+    - 出参的 ``check`` 是按输出行求和的 → 把"分摊之和 == 账单总额"**误报为未通过**，
+      看起来像数据损坏，其实只是漏了一行。
+
+    正确口径：参与结算的人 = 当前 joined 成员 ∪ 所有账单里出现过的人（付款人或分摊人）。
+    """
+    owner = make_user("user1")
+    m2 = make_user("user2")
+    post = create_post(client, owner["headers"], need_count=5)
+    room = create_room(client, owner["headers"], post["id"])
+    apply_and_approve(client, owner["headers"], m2["headers"], room["id"])
+
+    # owner 垫付 10000 分，owner 与 m2 各摊 5000
+    member_ids = room_member_ids(client, owner["headers"], room["id"])
+    created = client.post(
+        f"/api/rooms/{room['id']}/bills",
+        headers=owner["headers"],
+        json={"amount_cents": 10000, "participant_member_ids": list(member_ids.values())},
+    )
+    assert created.status_code == 201, created.text
+
+    # m2 在结算前退出
+    left = client.post(f"/api/rooms/{room['id']}/leave", headers=m2["headers"])
+    assert left.status_code == 200, left.text
+
+    resp = client.post(f"/api/rooms/{room['id']}/settlement", headers=owner["headers"])
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    items = {item["user_id"]: item for item in body["items"]}
+    assert m2["id"] in items, "已退出但参与过账务的成员必须仍出现在结算里"
+    assert owner["id"] in items
+
+    # 净额守恒：全员净额之和恒为 0
+    assert sum(item["net_cents"] for item in body["items"]) == 0
+    # owner 净应收 5000，m2 净应付 5000
+    assert items[owner["id"]]["net_cents"] == 5000
+    assert items[m2["id"]]["net_cents"] == -5000
+    # check 不应因为漏行而误报
+    assert body["check"]["sum_share_equals_total"] is True
+    assert body["total_cents"] == 10000

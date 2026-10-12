@@ -88,37 +88,58 @@ def trigger_settlement(
     if bill_count == 0:
         raise conflict("房间还没有账单，无需结算。请先记一笔账。")
 
-    # 参与结算的成员：当前 joined 成员（含房主）。
-    member_rows = db.execute(
-        select(RoomMember, User.username)
+    # 账单及分摊明细。先取账单：用它确定"参与过账务的人"，用于挑选结算参与者。
+    bill_rows = db.execute(
+        select(Bill).where(Bill.room_id == room.id).order_by(Bill.id.asc())
+    ).scalars().all()
+    bills_for_settlement: list[BillForSettlement] = []
+    involved_user_ids: set[int] = set()
+    for bill in bill_rows:
+        shares = db.execute(
+            select(BillShare).where(BillShare.bill_id == bill.id)
+        ).scalars().all()
+        share_map = {share.user_id: share.amount_cents for share in shares}
+        involved_user_ids.add(bill.payer_id)
+        involved_user_ids.update(share_map)
+        bills_for_settlement.append(
+            BillForSettlement(
+                payer_id=bill.payer_id,
+                amount_cents=bill.amount_cents,
+                shares=share_map,
+            )
+        )
+
+    # 参与结算的人 = 当前 joined 成员 ∪ 账单里出现过的人（含已退出者）。
+    #
+    # 只取 joined 会漏掉"记完账之后退出"的成员：他们的已付 / 分摊被累加了却不输出，
+    # 导致净额之和不为 0；更糟的是出参的 check 字段是按输出行求和的，
+    # 会因此把"分摊之和 == 账单总额"误报为未通过 —— 看起来像数据损坏，其实只是漏行。
+    joined_rows = db.execute(
+        select(RoomMember.user_id, User.username, RoomMember.id)
         .join(User, User.id == RoomMember.user_id)
         .where(
             RoomMember.room_id == room.id,
             RoomMember.status == MEMBER_STATUS_JOINED,
         )
-        .order_by(RoomMember.user_id.asc())
     ).all()
-    members = [
-        MemberForSettlement(member_id=member.id, user_id=member.user_id, username=username)
-        for member, username in member_rows
-    ]
+    participants: dict[int, tuple[str, int]] = {
+        user_id: (username, member_id) for user_id, username, member_id in joined_rows
+    }
 
-    # 账单及分摊明细。
-    bills = db.execute(
-        select(Bill).where(Bill.room_id == room.id).order_by(Bill.id.asc())
-    ).scalars().all()
-    bills_for_settlement: list[BillForSettlement] = []
-    for bill in bills:
-        shares = db.execute(
-            select(BillShare).where(BillShare.bill_id == bill.id)
-        ).scalars().all()
-        bills_for_settlement.append(
-            BillForSettlement(
-                payer_id=bill.payer_id,
-                amount_cents=bill.amount_cents,
-                shares={share.user_id: share.amount_cents for share in shares},
-            )
-        )
+    # 已退出但有账务往来的成员：补上用户名；member_id 无当前记录，占位为 0
+    # （出参的 member_id 由读取时按成员记录反查，不依赖这里的取值）。
+    missing_user_ids = sorted(involved_user_ids - set(participants))
+    if missing_user_ids:
+        rows = db.execute(
+            select(User.id, User.username).where(User.id.in_(missing_user_ids))
+        ).all()
+        for user_id, username in rows:
+            participants[user_id] = (username, 0)
+
+    members = [
+        MemberForSettlement(member_id=member_id, user_id=user_id, username=username)
+        for user_id, (username, member_id) in sorted(participants.items())
+    ]
 
     lines, _total_cents, _check = compute_settlement(members, bills_for_settlement)
 
