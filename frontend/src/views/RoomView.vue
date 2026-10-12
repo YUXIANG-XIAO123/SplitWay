@@ -480,13 +480,20 @@ onMounted(async () => {
             <button
               v-if="isHost"
               type="button"
-              :disabled="busy"
+              :disabled="busy || (!isSettled && bills.length === 0)"
               class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
               @click="handleSettle"
             >
               {{ isSettled ? '重新查看结算结果' : '触发结算' }}
             </button>
           </div>
+
+          <p
+            v-if="isHost && !isSettled && bills.length === 0"
+            class="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500"
+          >
+            结算会把房间里已有的账单按人汇总，所以至少要先记一笔账。当前没有账单，暂时不能结算。
+          </p>
 
           <template v-if="settlement">
             <div class="mb-3 text-xs text-slate-500">

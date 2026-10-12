@@ -80,3 +80,35 @@ def test_get_settlement_before_settlement_returns_404(client: TestClient, make_u
     owner, _m2, _m3, room = _setup_settled_candidate(client, make_user)
     resp = client.get(f"/api/rooms/{room['id']}/settlement", headers=owner["headers"])
     assert resp.status_code == 404
+
+
+def test_settlement_requires_at_least_one_bill(client: TestClient, make_user) -> None:
+    """防呆：零账单不允许结算。
+
+    否则会生成一份"全员净额 0"的无意义结算，同时把房间锁成 settled 只读；
+    而一条帖子只能有一个房间（create_room 对同帖返回 409），等于把这条路彻底堵死。
+    """
+    owner = make_user("user1")
+    m2 = make_user("user2")
+    post = create_post(client, owner["headers"], need_count=5)
+    room = create_room(client, owner["headers"], post["id"])
+    apply_and_approve(client, owner["headers"], m2["headers"], room["id"])
+
+    # 一条账单都没有 → 拒绝
+    resp = client.post(f"/api/rooms/{room['id']}/settlement", headers=owner["headers"])
+    assert resp.status_code == 409, resp.text
+    assert "账单" in resp.json()["detail"]["message"]
+
+    # 房间没有被锁死：仍可记账
+    member_ids = room_member_ids(client, owner["headers"], room["id"])
+    created = client.post(
+        f"/api/rooms/{room['id']}/bills",
+        headers=owner["headers"],
+        json={"amount_cents": 10000, "participant_member_ids": list(member_ids.values())},
+    )
+    assert created.status_code == 201, created.text
+
+    # 记了账单之后就能正常结算
+    ok = client.post(f"/api/rooms/{room['id']}/settlement", headers=owner["headers"])
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["total_cents"] == 10000

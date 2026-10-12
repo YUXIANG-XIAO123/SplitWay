@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.errors import conflict, forbidden, not_found
+from app.models.bill import Bill
 from app.models.post import POST_STATUS_OPEN, PartnerPost
-from app.models.room import MEMBER_STATUS_PENDING, Room, RoomMember
+from app.models.room import MEMBER_STATUS_PENDING, ROOM_STATUS_SETTLED, Room, RoomMember
 from app.models.user import User
 from app.schemas.post import ApplicantOut, PostCreate, PostDetailOut, PostListOut, PostOut
 
@@ -137,18 +138,38 @@ def delete_post(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    """删除帖子；仅帖主可删，否则 403。已创建房间的帖子不可删除（409）。"""
+    """删除帖子；仅帖主可删，否则 403。
+
+    房间按三档处理（原先是"有房间就一律拒绝"，把"建错房间想重来"也堵死了）：
+
+    ========================  ===================================
+    无房间                    直接删帖
+    有房间，房间为空          连同空房间一起删（成员记录级联清除）
+    （0 账单且未结算）
+    有房间，有账单或已结算    **409**，保护账目
+    ========================  ===================================
+    """
     post = db.get(PartnerPost, post_id)
     if post is None:
         raise not_found("帖子不存在。")
     if post.owner_id != current_user.id:
         raise forbidden("仅帖主可删除该帖子。")
 
-    room_exists = db.execute(
-        select(Room.id).where(Room.post_id == post.id).limit(1)
+    room = db.execute(
+        select(Room).where(Room.post_id == post.id).limit(1)
     ).scalar_one_or_none()
-    if room_exists is not None:
-        raise conflict("该帖子已创建房间，无法删除。")
+
+    if room is not None:
+        bill_count = db.execute(
+            select(func.count()).select_from(Bill).where(Bill.room_id == room.id)
+        ).scalar_one()
+        if room.status == ROOM_STATUS_SETTLED or bill_count > 0:
+            raise conflict("该帖子的房间已有账单或已结算，无法删除帖子。")
+        # 空房间：随帖子一并删除（room_members 由 Room.members 的级联负责）。
+        # 必须显式 flush：rooms.post_id → partner_posts.id，若与帖子的删除放在同一次 flush，
+        # SQLAlchemy 不保证先删子表，会撞 FK 约束（实测 ForeignKeyViolation）。
+        db.delete(room)
+        db.flush()
 
     db.delete(post)
     db.commit()

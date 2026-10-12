@@ -225,7 +225,21 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 | POST | `/api/posts` | `{destination, depart_date, need_count, note?}` | 201 帖子 | 已登录 |
 | GET | `/api/posts` | `?status=open&page=1&size=20` | 200 `{items[], total}` | 已登录 |
 | GET | `/api/posts/{post_id}` | — | 200 帖子 + 申请人列表（仅帖主可见申请人明细）+ **`room_id`（该帖已创建的房间 id，未创建为 `null`）** | 已登录 |
-| DELETE | `/api/posts/{post_id}` | — | 204 | **仅帖主**，否则 403 |
+| DELETE | `/api/posts/{post_id}` | — | 204 | **仅帖主**，否则 403；见下方房间处理规则 |
+
+**删帖时的房间处理（三档）** —— 帖子的房间由 `#1` 时的"有房间就一律拒绝"放宽为：
+
+| 情况 | 行为 |
+|---|---|
+| 无房间 | 直接删帖 |
+| 有房间，且**房间为空**（0 账单、未结算） | 连同空房间一起删（`room_members` 由 `Room.members` 级联清除）→ 204 |
+| 有房间，且**有账单或已结算** | **409**「该帖子的房间已有账单或已结算，无法删除帖子。」—— 保护账目 |
+
+放宽的理由：原规则把"建错房间想重来"也堵死了 —— `create_room` 对同一帖子返回 409（一条帖子只能有一个房间），
+于是用户既删不掉帖子、也建不了新房间，**没有任何出路**。空房间不承载账目，删掉是安全的。
+
+> 实现注意：`rooms.post_id → partner_posts.id`，删房间与删帖子**不能放在同一次 flush**
+> （SQLAlchemy 不保证先删子表，会撞 `rooms_post_id_fkey`）。代码里在 `db.delete(room)` 后显式 `db.flush()`。
 
 ### 5.4 房间与成员
 
@@ -264,8 +278,12 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 |---|---|---|---|---|
-| POST | `/api/rooms/{room_id}/settlement` | — | 200 结算结果 | **仅房主**，否则 403 |
+| POST | `/api/rooms/{room_id}/settlement` | — | 200 结算结果 | **仅房主**，否则 403；**房间无账单 → 409**；已结算 → 200（幂等） |
 | GET | `/api/rooms/{room_id}/settlement` | — | 200 结算结果 / 404 未结算 | 仅 joined/owner 成员 |
+
+**前置条件：POST 结算要求房间至少有一条账单。** 零账单结算会产生一份"全员净额 0"的无意义结果，
+同时把房间置为 `settled` 只读；而 `create_room` 对同一帖子返回 409（一条帖子只能有一个房间），
+**一旦误结算这条路就彻底堵死**。因此后端直接拦截，前端也在无账单时禁用按钮并给出提示。
 
 结算结果出参：
 

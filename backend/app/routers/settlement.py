@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import require_room_member, require_room_owner
-from app.errors import not_found
+from app.errors import conflict, not_found
 from app.models.bill import Bill, BillShare
 from app.models.room import MEMBER_STATUS_JOINED, ROOM_STATUS_SETTLED, Room, RoomMember
 from app.models.settlement import Settlement, SettlementItem
@@ -70,12 +70,23 @@ def trigger_settlement(
     db: Session = Depends(get_db),
     room: Room = Depends(require_room_owner),
 ) -> SettlementOut:
-    """触发结算；仅房主可调用。幂等：已结算则直接返回既有结果（B5）。"""
+    """触发结算；仅房主可调用。幂等：已结算则直接返回既有结果（B5）。
+
+    前置条件：房间必须至少有一条账单。否则会生成一份"全员净额 0"的无意义结算，
+    同时把房间置为 ``settled`` 只读 —— 而一条帖子只能有一个房间，等于把这条路彻底堵死。
+    """
     existing = db.execute(
         select(Settlement).where(Settlement.room_id == room.id)
     ).scalar_one_or_none()
     if existing is not None:
         return _build_settlement_out(db, existing)
+
+    # 防呆：零账单不允许结算。
+    bill_count = db.execute(
+        select(func.count()).select_from(Bill).where(Bill.room_id == room.id)
+    ).scalar_one()
+    if bill_count == 0:
+        raise conflict("房间还没有账单，无需结算。请先记一笔账。")
 
     # 参与结算的成员：当前 joined 成员（含房主）。
     member_rows = db.execute(

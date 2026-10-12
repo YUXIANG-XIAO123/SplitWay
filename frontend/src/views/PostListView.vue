@@ -19,6 +19,8 @@ const listError = ref('')
 const showForm = ref(false)
 const submitting = ref(false)
 const formError = ref('')
+/** 刚发布成功的帖子；用于提示帖主"下一步去创建房间"。 */
+const createdPost = ref<PartnerPost | null>(null)
 
 const form = reactive({
   destination: '',
@@ -54,6 +56,17 @@ async function loadPosts(): Promise<void> {
 }
 
 function openDetail(post: PartnerPost): void {
+  createdPost.value = null
+  router.push({ name: 'post-detail', params: { id: String(post.id) } })
+}
+
+/** 发帖成功后直达详情页，引导帖主创建房间。 */
+function goCreateRoom(): void {
+  const post = createdPost.value
+  if (post === null) {
+    return
+  }
+  createdPost.value = null
   router.push({ name: 'post-detail', params: { id: String(post.id) } })
 }
 
@@ -81,7 +94,7 @@ async function submitPost(): Promise<void> {
 
   submitting.value = true
   try {
-    await postsApi.createPost({
+    const created = await postsApi.createPost({
       destination: form.destination.trim(),
       depart_date: form.depart_date,
       need_count: form.need_count,
@@ -90,6 +103,8 @@ async function submitPost(): Promise<void> {
     resetForm()
     showForm.value = false
     await loadPosts()
+    // 发帖只是第一步：必须由帖主创建房间，其他人才有「申请加入」的入口。
+    createdPost.value = created
   } catch (error) {
     formError.value = toApiError(error).message
   } finally {
@@ -190,6 +205,32 @@ onMounted(async () => {
           </button>
         </div>
       </form>
+
+      <div
+        v-if="createdPost"
+        class="mb-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3"
+      >
+        <p class="text-sm leading-relaxed text-amber-900">
+          帖子已发布，但还差一步 ——
+          <strong>需要你进入帖子详情点「创建房间」，其他人才有「申请加入」的入口。</strong>
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+            @click.stop="goCreateRoom"
+          >
+            去创建房间
+          </button>
+          <button
+            type="button"
+            class="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-800 hover:bg-amber-100"
+            @click.stop="createdPost = null"
+          >
+            知道了
+          </button>
+        </div>
+      </div>
 
       <p v-if="listError" class="mb-4 text-sm text-rose-600">{{ listError }}</p>
       <p v-if="loading" class="text-sm text-slate-500">加载中…</p>

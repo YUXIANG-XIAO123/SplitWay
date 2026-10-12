@@ -208,15 +208,19 @@ onMounted(async () => {
 
           <div class="mt-5 flex flex-wrap gap-3">
             <template v-if="isOwner">
-              <button
-                v-if="roomId === null"
-                type="button"
-                :disabled="busy"
-                class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
-                @click="handleCreateRoom"
-              >
-                创建房间
-              </button>
+              <template v-if="roomId === null">
+                <button
+                  type="button"
+                  :disabled="busy"
+                  class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+                  @click="handleCreateRoom"
+                >
+                  创建房间
+                </button>
+                <span class="self-center text-sm text-slate-500">
+                  创建房间后，其他人才有「申请加入」的入口
+                </span>
+              </template>
               <button
                 v-else
                 type="button"
