@@ -517,7 +517,7 @@ onMounted(async () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in settlement.items" :key="item.member_id" class="border-b border-slate-100">
+                  <tr v-for="item in settlement.items" :key="item.user_id" class="border-b border-slate-100">
                     <td class="py-2 pr-4 text-slate-800">{{ item.username }}</td>
                     <td class="py-2 pr-4 text-slate-700">{{ formatCents(item.paid_cents) }}</td>
                     <td class="py-2 pr-4 text-slate-700">{{ formatCents(item.share_cents) }}</td>

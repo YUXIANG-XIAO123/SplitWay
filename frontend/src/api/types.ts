@@ -109,9 +109,8 @@ export interface Bill {
   shares: BillShare[]
 }
 
-/** 结算明细行（§5.6） */
+/** 结算明细行（§5.6）。只以 user_id 标识主体 —— 财务主体是"人"，不是房间成员记录。 */
 export interface SettlementItem {
-  member_id: number
   user_id: number
   username: string
   paid_cents: number

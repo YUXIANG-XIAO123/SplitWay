@@ -1,5 +1,7 @@
 # SplitWay · 分途
 
+[![CI](https://github.com/YUXIANG-XIAO123/SplitWay/actions/workflows/ci.yml/badge.svg)](https://github.com/YUXIANG-XIAO123/SplitWay/actions/workflows/ci.yml)
+
 > **面向小群体出行的同行撮合与共同账目结算工具**
 > （Companion Matching & Shared Expense Settlement for Small Group Travel）
 > 个人全栈项目

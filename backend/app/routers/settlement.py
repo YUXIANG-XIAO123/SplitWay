@@ -28,16 +28,6 @@ def _build_settlement_out(db: Session, settlement: Settlement) -> SettlementOut:
         .order_by(SettlementItem.user_id.asc())
     ).all()
 
-    # 反查 member_id（结算时可能存在已退出成员，取该用户在该房间的最新一条成员记录）。
-    member_rows = db.execute(
-        select(RoomMember.user_id, RoomMember.id)
-        .where(RoomMember.room_id == settlement.room_id)
-        .order_by(RoomMember.id.asc())
-    ).all()
-    member_id_by_user: dict[int, int] = {}
-    for user_id, member_id in member_rows:
-        member_id_by_user[user_id] = member_id
-
     items: list[SettlementItemOut] = []
     total_paid = 0
     total_share = 0
@@ -46,7 +36,6 @@ def _build_settlement_out(db: Session, settlement: Settlement) -> SettlementOut:
         total_share += item.share_cents
         items.append(
             SettlementItemOut(
-                member_id=member_id_by_user.get(item.user_id, 0),
                 user_id=item.user_id,
                 username=username,
                 paid_cents=item.paid_cents,
@@ -126,8 +115,8 @@ def trigger_settlement(
         user_id: (username, member_id) for user_id, username, member_id in joined_rows
     }
 
-    # 已退出但有账务往来的成员：补上用户名；member_id 无当前记录，占位为 0
-    # （出参的 member_id 由读取时按成员记录反查，不依赖这里的取值）。
+    # 已退出但有账务往来的成员：补上用户名。member_id 已无当前记录，占位为 0 ——
+    # 结算出参只以 user_id 标识主体，不再回填 member_id。
     missing_user_ids = sorted(involved_user_ids - set(participants))
     if missing_user_ids:
         rows = db.execute(

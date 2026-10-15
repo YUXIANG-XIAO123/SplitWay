@@ -287,18 +287,23 @@ net_cents[user]   = paid_cents[user] - share_cents[user]
 
 结算结果出参：
 
-```json
-{
-  "room_id": 1,
-  "settled_at": "2026-09-28T15:00:00Z",
-  "items": [
-    {"member_id": 1, "user_id": 1, "username": "u1",
-     "paid_cents": 10000, "share_cents": 3334, "net_cents": 6666}
-  ],
-  "total_cents": 10000,
-  "check": {"sum_share_equals_total": true}
-}
-```
+  ```json
+  {
+    "room_id": 1,
+    "settled_at": "2026-09-28T15:00:00Z",
+    "items": [
+      {"user_id": 1, "username": "u1",
+       "paid_cents": 10000, "share_cents": 3334, "net_cents": 6666}
+    ],
+    "total_cents": 10000,
+    "check": {"sum_share_equals_total": true}
+  }
+  ```
+
+  **`items` 只以 `user_id` 标识主体，不含 `member_id`。** 结算是账务快照，财务主体是"人"而非"房间成员记录"；
+  `member_id` 只在记账入参（`participant_member_ids`）里作为"房间内成员资格"的入口存在。
+  早先出参里带过一个 `member_id`，但它是读取时按**当前**成员记录反查的（取 id 最大的那条），
+  并非结算时固化的值 —— 一旦成员记录变化就会漂移，属于会误导的展示字段，已移除。
 
 `check.sum_share_equals_total` 是给验收脚本直接读的不变式字段——把 B3 的断言变成读一个布尔值。
 
