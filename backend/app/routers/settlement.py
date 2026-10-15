@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -134,7 +135,21 @@ def trigger_settlement(
 
     settlement = Settlement(room_id=room.id)
     db.add(settlement)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # 并发：另一个请求已抢先写入本房间的结算。
+        #
+        # ``settlements.room_id`` 的唯一约束只保证"最终不会有两行"，**不保证两个并发请求都成功** ——
+        # 两个请求都会先查到"还没有结算"，然后都尝试 INSERT，其中一个必然撞约束。
+        # 这里把失败的那次转成幂等返回，而不是让它冒成 500。
+        db.rollback()
+        winner = db.execute(
+            select(Settlement).where(Settlement.room_id == room.id)
+        ).scalar_one_or_none()
+        if winner is not None:
+            return _build_settlement_out(db, winner)
+        raise conflict("房间结算发生并发冲突，请重试。")
     for line in lines:
         db.add(
             SettlementItem(

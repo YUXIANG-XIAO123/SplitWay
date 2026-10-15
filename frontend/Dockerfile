@@ -34,4 +34,12 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
 
+# 健康检查：发一次真实 HTTP 请求验证 nginx 确实在提供页面。
+# nginx:1.27-alpine 自带 busybox wget，无需额外安装（与 backend 用标准库的做法同思路）。
+#
+# 为什么必须有：PRD 的 A1 验收判据是「三个容器均 healthy」。此前只有 db 与 backend 有 healthcheck，
+# frontend 没有 —— 也就是说 A1 的判据**根本无法达成**，docker compose ps 里 frontend 永远只显示 Up。
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=12 \
+  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from fastapi.testclient import TestClient
 
 from tests.helpers import apply_and_approve, create_post, create_room, room_member_ids
@@ -112,6 +114,51 @@ def test_settlement_requires_at_least_one_bill(client: TestClient, make_user) ->
     ok = client.post(f"/api/rooms/{room['id']}/settlement", headers=owner["headers"])
     assert ok.status_code == 200, ok.text
     assert ok.json()["total_cents"] == 10000
+
+
+def test_settlement_concurrent_calls_are_idempotent(
+    client: TestClient, make_user
+) -> None:
+    """并发结算：两个请求同时进入时，都必须拿到 200，不能出现 500。
+
+    回归用例。修复前的行为：两个请求都会查到"还没有结算"，然后都尝试 INSERT，
+    其中一个撞 ``settlements.room_id`` 的唯一约束 → IntegrityError → **500**。
+    ``settlements.room_id`` 的唯一约束只保证"最终不会有两行"，不保证"两个请求都成功"。
+
+    注意：两个线程各用一个独立 TestClient，避免共用连接导致请求被串行化而测不到并发。
+    """
+    owner, _m2, _m3, room = _setup_settled_candidate(client, make_user)
+    url = f"/api/rooms/{room['id']}/settlement"
+
+    barrier = threading.Barrier(2)
+    results: list[int] = []
+    bodies: list[dict] = []
+    lock = threading.Lock()
+
+    def call() -> None:
+        local = TestClient(client.app)
+        barrier.wait(timeout=10)
+        resp = local.post(url, headers=owner["headers"])
+        with lock:
+            results.append(resp.status_code)
+            if resp.status_code == 200:
+                bodies.append(resp.json())
+
+    threads = [threading.Thread(target=call) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert sorted(results) == [200, 200], f"并发结算出现非 200：{results}"
+    # 两次返回必须是同一份结算（同一时间戳），即真正的幂等
+    assert len(bodies) == 2
+    assert bodies[0]["settled_at"] == bodies[1]["settled_at"]
+    assert bodies[0]["items"] == bodies[1]["items"]
+    # 且库里只有一条结算记录
+    got = client.get(url, headers=owner["headers"])
+    assert got.status_code == 200
+    assert got.json()["settled_at"] == bodies[0]["settled_at"]
 
 
 def test_settlement_includes_member_who_left_after_billing(
